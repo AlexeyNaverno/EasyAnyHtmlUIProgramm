@@ -366,3 +366,51 @@ test('APK modules stay browser-safe', () => {
     assert.ok(!/from\s+'node:/.test(src), `${f}.js must not import node builtins`);
   }
 });
+
+/* ------------------------------------------- compile() integration */
+
+test('compile() takes the prebuilt Android path without any SDK', async () => {
+  const { mkdtempSync, writeFileSync, rmSync, existsSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join: pjoin } = await import('node:path');
+  const { compile } = await import('../packages/core/src/compiler.js');
+
+  const rt = mkdtempSync(pjoin(tmpdir(), 'easyapp-rt-test-'));
+  const out = mkdtempSync(pjoin(tmpdir(), 'easyapp-out-test-'));
+  const keyFile = pjoin(rt, 'identity.json');
+  const savedRt = process.env.EASYAPP_RUNTIMES;
+  const savedKey = process.env.EASYAPP_SIGNING_IDENTITY;
+  const savedHome = process.env.ANDROID_HOME;
+  try {
+    writeFileSync(pjoin(rt, 'android-runtime.dex'), fakeDex());
+    process.env.EASYAPP_RUNTIMES = rt;
+    process.env.EASYAPP_SIGNING_IDENTITY = keyFile;
+    delete process.env.ANDROID_HOME;          // prove no SDK is consulted
+
+    const input = strToU8('<!-- easyapp:name Prebuilt App -->'
+      + '<!-- easyapp:id org.prebuilt.app --><html><body>x</body></html>');
+    const logs = [];
+    const res = await compile(input, {
+      filename: 'index.html', target: 'android-apk', outDir: out, onLog: (m) => logs.push(m),
+    });
+    assert.equal(res.runtimeSource, 'prebuilt');
+    assert.equal(res.filename, 'Prebuilt_App.apk');
+    assert.ok(logs.some((l) => /no SDK needed/.test(l)), 'logs explain the fast path');
+    assert.ok(existsSync(keyFile), 'signing key was persisted');
+    const files = unzipSync(res.bytes);
+    assert.ok(files['classes.dex']);
+    assert.ok(files['assets/www/index.html']);
+
+    // A second build must reuse the key so the app can be updated in place.
+    const second = await compile(input, {
+      filename: 'index.html', target: 'android-apk', outDir: out, onLog: () => {},
+    });
+    assert.deepEqual(second.bytes, res.bytes, 'same key and input give a reproducible APK');
+  } finally {
+    if (savedRt === undefined) delete process.env.EASYAPP_RUNTIMES; else process.env.EASYAPP_RUNTIMES = savedRt;
+    if (savedKey === undefined) delete process.env.EASYAPP_SIGNING_IDENTITY; else process.env.EASYAPP_SIGNING_IDENTITY = savedKey;
+    if (savedHome !== undefined) process.env.ANDROID_HOME = savedHome;
+    rmSync(rt, { recursive: true, force: true });
+    rmSync(out, { recursive: true, force: true });
+  }
+});

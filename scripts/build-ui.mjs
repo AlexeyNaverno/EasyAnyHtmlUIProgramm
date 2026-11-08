@@ -6,11 +6,12 @@
  */
 
 import { build } from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { compile } from '../packages/core/src/compiler.js';
+import { RUNTIME_NAMES } from '../packages/core/src/runtimes.js';
 import { strToU8 } from '../packages/core/src/bundle.js';
 import { zipSync } from 'fflate';
 
@@ -62,9 +63,32 @@ async function main() {
 
   const bridgeSource = readFileSync(join(ROOT, 'packages/core/runtime/bridge.js'), 'utf8');
 
+  // Embed the generic native runtimes so the app can finish native builds on a
+  // device with no Zig, JDK or Android SDK. They are generated from source by
+  // scripts/build-runtimes.mjs and are never committed.
+  const runtimeMap = {};
+  const rtDir = process.env.EASYAPP_RUNTIMES || join(ROOT, 'build', 'runtimes');
+  // Whitelist: Zig also drops .pdb/.lib artefacts next to its output, and those
+  // must never be embedded (they would multiply the app size for nothing).
+  const wanted = [
+    RUNTIME_NAMES.windowsHost('x64'), RUNTIME_NAMES.windowsInstaller('x64'),
+    RUNTIME_NAMES.windowsHost('x86'), RUNTIME_NAMES.windowsInstaller('x86'),
+    RUNTIME_NAMES.linuxHost('x64'), RUNTIME_NAMES.androidDex(),
+  ];
+  for (const name of wanted) {
+    const path = join(rtDir, name);
+    if (existsSync(path)) runtimeMap[name] = readFileSync(path).toString('base64');
+  }
+  const rtNames = Object.keys(runtimeMap);
+  console.log(rtNames.length
+    ? `Embedded runtimes: ${rtNames.join(', ')}`
+    : 'No prebuilt runtimes found; the app will offer web-bundle and source-project only.\n'
+      + 'Run: node scripts/build-runtimes.mjs');
+
   const preamble = [
     `globalThis.__EASYAPP_TEMPLATES__ = ${JSON.stringify(templateMap)};`,
     `globalThis.__EASYAPP_BRIDGE_SOURCE__ = ${JSON.stringify(bridgeSource)};`,
+    `globalThis.__EASYAPP_RUNTIMES__ = ${JSON.stringify(runtimeMap)};`,
   ].join('\n');
 
   writeFileSync(join(OUT, 'app.js'), `${preamble}\n${appJs}`);

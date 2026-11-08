@@ -4,6 +4,7 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 
 import { loadBundle } from './bundle.js';
@@ -15,7 +16,9 @@ import { packZip, strToU8 } from './bundle.js';
 import {
   REPO_ROOT, readTemplateTree, makeWorkDir, writeTree, cleanup, buildAndroidApk,
 } from './toolchain.js';
-import { getWindowsRuntimes, getLinuxRuntimes } from './runtimes.js';
+import { getWindowsRuntimes, getLinuxRuntimes, readRuntime, RUNTIME_NAMES } from './runtimes.js';
+import { packageApk } from './apk/assemble.js';
+import { identityToBase64, identityFromBase64 } from './apk/sign-v2.js';
 import { packageWindows, packageLinux } from './packaging.js';
 
 const BRIDGE_PATH = join(REPO_ROOT, 'packages/core/runtime/bridge.js');
@@ -108,6 +111,25 @@ export async function compile(bytes, {
 
   /* ----------------------------------------------------------- Android */
   if (targetId === 'android-apk') {
+    // Fast path: a prebuilt generic DEX lets us assemble and sign the APK here,
+    // with no JDK, Gradle or Android SDK involved.
+    const dex = readRuntime(RUNTIME_NAMES.androidDex());
+    if (dex) {
+      say('Using the prebuilt Android runtime (no SDK needed)');
+      const res = await packageApk(bundle, bridgeJs, {
+        dex, identity: loadSigningIdentity(say),
+      });
+      if (res.identityCreated) saveSigningIdentity(res.identity, say);
+      for (const w of res.warnings) say(`warning: ${w}`);
+      const path = join(outDir, res.filename);
+      writeFileSync(path, res.bytes);
+      say(`Written ${path} (${(res.bytes.length / 1024).toFixed(1)} KiB)`);
+      return {
+        path, filename: res.filename, bytes: res.bytes,
+        warnings: res.warnings, log, projectDir: null, runtimeSource: 'prebuilt',
+      };
+    }
+
     const template = readTemplateTree('templates/runtime-android');
     const project = buildAndroidProject(bundle, bridgeJs, template);
     for (const w of project.warnings) say(`warning: ${w}`);
@@ -227,4 +249,33 @@ function sourceProjectReadme(bundle) {
     'в каталог `www/` рядом с бинарником.',
     '',
   ].join('\n');
+}
+
+/* ------------------------------------------------------ signing identity */
+
+function identityPath() {
+  return process.env.EASYAPP_SIGNING_IDENTITY
+    || join(homedir(), '.easyapp', 'signing-identity.json');
+}
+
+function loadSigningIdentity(say) {
+  const path = identityPath();
+  if (!existsSync(path)) return null;
+  try {
+    return identityFromBase64(JSON.parse(readFileSync(path, 'utf8')));
+  } catch (err) {
+    say(`warning: cannot read the signing key at ${path}: ${err.message}`);
+    return null;
+  }
+}
+
+function saveSigningIdentity(identity, say) {
+  const path = identityPath();
+  try {
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    writeFileSync(path, JSON.stringify(identityToBase64(identity), null, 2), { mode: 0o600 });
+    say(`Signing key saved to ${path} — keep it to publish updates`);
+  } catch (err) {
+    say(`warning: cannot save the signing key: ${err.message}`);
+  }
 }

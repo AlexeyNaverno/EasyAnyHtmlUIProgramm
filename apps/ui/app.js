@@ -28,14 +28,20 @@ async function loadTargets() {
   targets = await api.targets();
   const select = $('target');
   select.innerHTML = targets.map((t) => `<option value="${esc(t.id)}">${esc(t.label)}</option>`).join('');
-  // In a compiled compiler app only the pure-JS targets can run.
-  select.value = api.canBuildNative ? 'windows-x64' : 'source-project';
-  if (!api.canBuildNative) {
-    for (const option of select.options) {
-      if (!['web-bundle', 'source-project'].includes(option.value)) {
-        option.disabled = true;
-        option.textContent += ' — нужен ПК';
-      }
+  // A standalone build can finish any target whose runtime is embedded.
+  const availability = api.availability || null;
+  const usable = (id) => (availability ? availability[id] !== false : api.canBuildNative
+    || ['web-bundle', 'source-project'].includes(id));
+  // On a phone the APK is the obvious choice; on a PC it is the Windows build.
+  const preferred = availability
+    ? ['android-apk', 'windows-x64', 'linux-x64', 'source-project', 'web-bundle']
+    : ['windows-x64', 'android-apk', 'linux-x64', 'web-bundle', 'source-project'];
+  select.value = preferred.find((id) => usable(id) && targets.some((t) => t.id === id))
+    || 'source-project';
+  for (const option of select.options) {
+    if (!usable(option.value)) {
+      option.disabled = true;
+      option.textContent += ' — нет встроенного рантайма';
     }
   }
   updateTargetDesc();
@@ -66,7 +72,9 @@ function renderToolchain(target) {
   $('toolchain').innerHTML = target.requires.map((req) => {
     const info = doctorReport[keys[req] || req];
     const ok = info && info.available;
-    return `<span class="tc ${ok ? 'ok' : 'no'}">${ok ? '✓' : '✗'} ${esc(labels[req] || req)}</span>`;
+    // In the app the toolchain is not installed; the runtime ships prebuilt.
+    const suffix = ok && info.embedded ? ' (встроен)' : '';
+    return `<span class="tc ${ok ? 'ok' : 'no'}">${ok ? '✓' : '✗'} ${esc(labels[req] || req)}${suffix}</span>`;
   }).join('') || '<span class="tc ok">Тулчейн не требуется</span>';
 }
 
@@ -258,9 +266,16 @@ async function boot() {
   api = await createApi();
   await loadTargets();
   await loadDoctor();
-  const modeNote = api.mode === 'standalone'
-    ? 'Компилятор запущен как приложение: доступны веб-бандл и исходный проект'
-    : 'Готов к работе';
+  let modeNote = 'Готов к работе';
+  if (api.mode === 'standalone') {
+    const native = api.availability
+      ? Object.entries(api.availability)
+        .filter(([id, ok]) => ok && !['web-bundle', 'source-project'].includes(id)).length
+      : 0;
+    modeNote = native
+      ? `Компилятор запущен как приложение: сборка ${native} нативных целей прямо на устройстве`
+      : 'Компилятор запущен как приложение: доступны веб-бандл и исходный проект';
+  }
   setStatus(modeNote, 'ok');
   document.body.dataset.mode = api.mode;
 }

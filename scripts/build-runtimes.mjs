@@ -15,7 +15,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -38,7 +38,16 @@ const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 const entries = [];
 const failures = [];
 
+/* Zig writes debug side files next to the output; they are not runtimes. */
+function dropSideFiles(path) {
+  for (const suffix of ['.pdb', '.lib']) {
+    const side = path.replace(/\.exe$/, '') + suffix;
+    if (existsSync(side)) rmSync(side, { force: true });
+  }
+}
+
 function record(name, path, tool) {
+  dropSideFiles(path);
   const bytes = new Uint8Array(readFileSync(path));
   entries.push({ name, file: name, bytes: bytes.length, sha256: sha256(bytes), builtWith: tool });
   console.log(`  OK: ${name} (${(bytes.length / 1024).toFixed(1)} KiB)`);
