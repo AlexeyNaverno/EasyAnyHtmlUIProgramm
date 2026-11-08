@@ -20,6 +20,14 @@
  * generated application (this bridge, the native hosts and cJSON). The
  * compiler proper remains under GPL-3.0-or-later without this exception.
  */
+/*
+ * GTK and the POSIX helpers below (readlink, strdup) need the GNU/POSIX
+ * declarations, which -std=c11 hides behind __STRICT_ANSI__.
+ */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
+
 #include <gtk/gtk.h>
 #include <webkit2/webkit2.h>
 #include <libsoup/soup.h>

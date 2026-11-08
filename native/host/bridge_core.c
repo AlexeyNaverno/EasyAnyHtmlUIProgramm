@@ -15,6 +15,11 @@
  * generated application (this bridge, the native hosts and cJSON). The
  * compiler proper remains under GPL-3.0-or-later without this exception.
  */
+#ifndef _WIN32
+/* Keep mkdir/opendir/readdir visible when compiled with -std=c11. */
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "bridge_core.h"
 #include "cJSON.h"
 
