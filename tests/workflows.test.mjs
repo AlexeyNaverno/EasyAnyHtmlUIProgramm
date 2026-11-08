@@ -136,3 +136,23 @@ test('the release builds the compiler for Windows, Linux and Android', () => {
     assert.ok(targets.includes(needed), `release compiler targets include ${needed}`);
   }
 });
+
+test('release workflow marks semver prereleases and never makes them latest', () => {
+  const text = readFileSync(join(DIR, 'release.yml'), 'utf8');
+  assert.match(text, /prerelease:\s*\$\{\{\s*steps\.kind\.outputs\.prerelease\s*\}\}/);
+  assert.match(text, /make_latest:\s*false/);
+  // The decision step must recognise the semver prerelease suffix.
+  assert.match(text, /grep -q '-'/);
+  assert.match(text, /prerelease=true/);
+  assert.match(text, /prerelease=false/);
+});
+
+test('README links to the releases page', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  assert.match(readme, /https:\/\/github\.com\/AlexeyNaverno\/EasyAnyHtmlUIProgramm\/releases/);
+  // /releases/latest 404s while only prereleases exist, so the download
+  // section must point at the list instead.
+  const download = /^## .*Скачать[^\n]*\n([\s\S]*?)\n---$/m.exec(readme);
+  assert.ok(download, 'README has a download section');
+  assert.match(download[1], /\/releases\)/);
+});

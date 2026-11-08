@@ -1,5 +1,9 @@
 # EasyAnyHtmlUIProgramm
 
+[![Последний релиз](https://img.shields.io/github/v/release/AlexeyNaverno/EasyAnyHtmlUIProgramm?include_prereleases&sort=semver&label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7)](https://github.com/AlexeyNaverno/EasyAnyHtmlUIProgramm/releases)
+[![Сборка](https://github.com/AlexeyNaverno/EasyAnyHtmlUIProgramm/actions/workflows/build.yml/badge.svg)](https://github.com/AlexeyNaverno/EasyAnyHtmlUIProgramm/actions/workflows/build.yml)
+[![Лицензия: GPL v3](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-GPLv3-blue.svg)](LICENSE)
+
 **Компилятор: один `.html` или `.zip` → готовый `.apk`, `.exe`-установщик или приложение для Linux.**
 
 Вы кладёте веб-файл — получаете нативное приложение, которое работает локально и офлайн.
@@ -14,6 +18,35 @@ app.html  ──►  [ EasyApp ]  ──►  MyApp-setup-x64.exe   (Windows, x64
                           ├──►  MyApp.apk             (Android 7.0+)
                           └──►  MyApp-linux-x64.zip   (WebKitGTK)
 ```
+
+---
+
+## 📥 Скачать — [последний релиз](https://github.com/AlexeyNaverno/EasyAnyHtmlUIProgramm/releases)
+
+Готовые сборки лежат в **[Releases](https://github.com/AlexeyNaverno/EasyAnyHtmlUIProgramm/releases)**.
+Все файлы собраны из исходников в GitHub Actions, к каждому релизу приложен
+`SHA256SUMS.txt`. Сейчас публикуются **пререлизы** — они помечены меткой
+`Pre-release` и пригодны для ознакомления, но не считаются стабильными.
+
+| Файл | Что это | Требования |
+|---|---|---|
+| `EasyApp_Compiler-setup-x64.exe` | Установщик компилятора, Windows 64-бит | WebView2 Runtime (есть в Windows 11) |
+| `EasyApp_Compiler-setup-x86.exe` | Установщик компилятора, Windows 32-бит | WebView2 Runtime |
+| `EasyApp_Compiler-windows-x64-portable.zip` | Portable-версия, без установки | WebView2 Runtime |
+| `EasyApp_Compiler-linux-x64.zip` | Компилятор для Linux, внутри `install.sh` | `libwebkit2gtk-4.1-0`, `libgtk-3-0` |
+| `EasyApp_Compiler.apk` | Компилятор для Android | Android 7.0+ (API 24) |
+| `EasyApp_Compiler-source.zip` | Исходники этого релиза | Node.js 22+ |
+| `Hello_EasyApp-*`, `Files_and_Net_Demo-*` | Примеры уже собранных приложений | по платформе |
+
+Проверка целостности после скачивания:
+
+```bash
+sha256sum -c SHA256SUMS.txt
+```
+
+> Ссылка [`releases/latest`](https://github.com/AlexeyNaverno/EasyAnyHtmlUIProgramm/releases/latest) указывает только на стабильные
+> версии, поэтому пока выходят одни пререлизы, пользуйтесь
+> **[списком релизов](https://github.com/AlexeyNaverno/EasyAnyHtmlUIProgramm/releases)** — там самый свежий всегда сверху.
 
 ---
 

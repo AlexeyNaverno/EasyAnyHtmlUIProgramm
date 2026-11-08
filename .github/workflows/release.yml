@@ -8,8 +8,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to publish (e.g. v0.1.0)'
+        description: 'Tag to publish (e.g. v0.1.0-rc.1)'
         required: true
+      prerelease:
+        description: 'Mark as a prerelease'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -144,15 +148,37 @@ jobs:
           cd artefacts
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
+      - name: Decide release kind
+        id: kind
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease }}
+        run: |
+          # A semver prerelease part (v0.1.0-rc.1) marks the release as a
+          # prerelease; a manual run can also force it.
+          if [ "$FORCE" = "true" ] || printf '%s' "$TAG" | grep -q '-'; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "Publishing $TAG as a prerelease"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "Publishing $TAG as a stable release"
+          fi
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
+          prerelease: ${{ steps.kind.outputs.prerelease }}
+          # Prereleases must never become the "latest" release.
+          make_latest: false
           files: |
             artefacts/*
           body: |
+            > **Пререлиз.** Собран для проверки, интерфейс и формат артефактов
+            > ещё могут меняться. Windows-сборки проверены автотестами,
+            > APK и Linux-пакет собраны из исходников в CI.
+
             Все артефакты собраны из исходников этим workflow.
 
             ## Компилятор
