@@ -47,7 +47,7 @@ child.on('close', (code) => {
     /* Surface the lines that explain the failure. Keep the original order. */
     const lines = captured.split(/\r?\n/);
     const interesting = lines.filter((l) =>
-      /error:|error [A-Z]|fatal error|undefined reference|Cannot find|not found|No such file|FAILURE:|What went wrong|Execution failed|Caused by:|^\s*e:\s/i.test(l));
+      /error:|error [A-Z]|fatal error|undefined reference|Cannot find|not found|No such file|FAILURE:|What went wrong|Execution failed|Caused by:|^\s*e:\s|^not ok |AssertionError|ERR_ASSERTION|Cannot find module|SyntaxError|TypeError|ReferenceError/i.test(l));
     const chosen = (interesting.length ? interesting : lines.filter(Boolean)).slice(0, 25);
     for (const line of chosen) {
       const text = line.trim().slice(0, 900);

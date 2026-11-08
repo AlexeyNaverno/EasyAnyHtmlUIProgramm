@@ -26,7 +26,7 @@ jobs:
       - name: Build the standalone UI (needed by the UI tests)
         run: node scripts/build-ui.mjs --assets-only
       - name: Run tests
-        run: node --test tests/*.test.mjs
+        run: node scripts/ci-run.mjs -- node --test tests/*.test.mjs
       - name: CLI smoke test
         run: |
           node apps/cli/src/index.mjs doctor
@@ -151,7 +151,7 @@ jobs:
         run: node scripts/setup-gradle-wrapper.mjs templates/runtime-android
       - name: Package the compiler with its own engine
         run: |
-          node scripts/ci-run.mjs -- node scripts/build-ui.mjs windows-x64 windows-x86 windows-portable-x64 linux-x64 android-apk source-project
+          node scripts/ci-run.mjs -- node scripts/build-ui.mjs --strict windows-x64 windows-x86 windows-portable-x64 linux-x64 android-apk source-project
       - uses: actions/upload-artifact@v4
         with:
           name: compiler-app

@@ -94,6 +94,9 @@ async function main() {
   // F-Droid builds the APK with its own Gradle invocation, so it only needs the
   // generated web assets, not the packaged artefacts.
   const assetsOnly = args.includes('--assets-only');
+  // Locally it is useful to build whatever the machine supports. In CI a
+  // missing artefact must fail the job, or a broken target ships unnoticed.
+  const strict = args.includes('--strict');
   const requested = args.filter((a) => !a.startsWith('--'));
   const targets = requested.length ? requested : ['windows-x64', 'windows-x86', 'windows-portable-x64'];
 
@@ -102,6 +105,7 @@ async function main() {
     console.log(`Assets written to ${OUT} (assets-only mode)`);
     return;
   }
+  const failed = [];
   for (const target of targets) {
     process.stdout.write(`\n=== ${target} ===\n`);
     try {
@@ -113,8 +117,16 @@ async function main() {
       });
       console.log(`  OK: ${res.filename} (${(res.bytes.length / 1024).toFixed(1)} KiB)`);
     } catch (err) {
-      console.log(`  SKIP: ${err.message.split('\n')[0]}`);
+      failed.push({ target, message: err.message });
+      console.log(`  ${strict ? 'FAILED' : 'SKIP'}: ${err.message.split('\n')[0]}`);
       if (err.projectZip) console.log(`  Project: ${err.projectZip}`);
+    }
+  }
+  if (failed.length) {
+    console.log(`\n${failed.length} of ${targets.length} target(s) failed: ${failed.map((f) => f.target).join(', ')}`);
+    if (strict) {
+      for (const f of failed) console.error(`\n--- ${f.target} ---\n${f.message}`);
+      process.exitCode = 1;
     }
   }
 }
