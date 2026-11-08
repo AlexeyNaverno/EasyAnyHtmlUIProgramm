@@ -1,0 +1,151 @@
+# Builds and tests every push. All artefacts are produced from source.
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Core tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci || npm install
+      - name: Install Zig (Windows cross-compilation)
+        run: pip install ziglang==0.13.0
+      - name: Build the standalone UI (needed by the UI tests)
+        run: node scripts/build-ui.mjs --assets-only
+      - name: Run tests
+        run: node --test tests/*.test.mjs
+      - name: CLI smoke test
+        run: |
+          node apps/cli/src/index.mjs doctor
+          node apps/cli/src/index.mjs targets
+          node apps/cli/src/index.mjs inspect examples/hello/index.html
+          node apps/cli/src/index.mjs build examples/hello/index.html -t windows-x64 -o dist-smoke
+          test -f dist-smoke/Hello_EasyApp-setup-x64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smoke-windows-x64
+          path: dist-smoke/*.exe
+
+  windows:
+    name: Windows hosts and installers
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci || npm install
+      - run: pip install ziglang==0.13.0
+      - name: Build both examples
+        run: |
+          node apps/cli/src/index.mjs build examples/hello/index.html \
+            -t windows-${{ matrix.arch }} -o out
+          (cd examples/files-and-net && zip -qr ../../files-and-net.zip .)
+          node apps/cli/src/index.mjs build files-and-net.zip \
+            -t windows-${{ matrix.arch }} -o out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: out/*.exe
+
+  linux:
+    name: Linux host (WebKitGTK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci || npm install
+      - name: Install WebKitGTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Build
+        run: |
+          node apps/cli/src/index.mjs build examples/hello/index.html -t linux-x64 -o out
+          (cd examples/files-and-net && zip -qr ../../files-and-net.zip .)
+          node apps/cli/src/index.mjs build files-and-net.zip -t linux-x64 -o out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: out/*.zip
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK components
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - run: npm ci || npm install
+      - name: Generate the Gradle wrapper from source
+        run: node scripts/setup-gradle-wrapper.mjs templates/runtime-android
+      - name: Build example APKs
+        run: |
+          node apps/cli/src/index.mjs build examples/hello/index.html -t android-apk -o out
+          (cd examples/files-and-net && zip -qr ../../files-and-net.zip .)
+          node apps/cli/src/index.mjs build files-and-net.zip -t android-apk -o out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: out/*.apk
+
+  compiler-app:
+    name: Compiler as a native app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - run: npm ci || npm install
+      - run: pip install ziglang==0.13.0
+      - name: Generate the Gradle wrapper
+        run: node scripts/setup-gradle-wrapper.mjs templates/runtime-android
+      - name: Package the compiler with its own engine
+        run: |
+          node scripts/build-ui.mjs windows-x64 windows-x86 windows-portable-x64 android-apk source-project
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compiler-app
+          path: |
+            dist/compiler/*.exe
+            dist/compiler/*.zip
+            dist/compiler/*.apk

@@ -1,0 +1,48 @@
+{
+  "name": "easyanyhtmluiprogramm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HTML/ZIP to native APK/EXE/Linux compiler",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:ui": "node scripts/build-ui.mjs --assets-only",
+    "build:compiler": "node scripts/build-ui.mjs",
+    "test": "node scripts/build-ui.mjs --assets-only && node --test tests/*.test.mjs",
+    "cli": "node apps/cli/src/index.mjs",
+    "mcp": "node apps/mcp/src/index.mjs",
+    "serve": "node apps/cli/src/index.mjs serve",
+    "doctor": "node apps/cli/src/index.mjs doctor",
+    "prepare:fdroid": "node scripts/prepare-fdroid.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10",
+    "fflate": "0.8.2",
+    "jsdom": "^25.0.1"
+  },
+  "bin": {
+    "easyapp": "apps/cli/src/index.mjs"
+  },
+  "keywords": [
+    "html",
+    "apk",
+    "exe",
+    "compiler",
+    "webview",
+    "android",
+    "fdroid",
+    "mcp",
+    "offline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlexeyNaverno/EasyAnyHtmlUIProgramm.git"
+  }
+}

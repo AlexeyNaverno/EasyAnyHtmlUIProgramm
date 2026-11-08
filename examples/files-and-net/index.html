@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- easyapp:name Files and Net Demo -->
+<!-- easyapp:id org.easyapp.examples.filesnet -->
+<!-- easyapp:version 1.0.0 -->
+<!-- easyapp:permission internet -->
+<!-- easyapp:permission files -->
+<title>Файлы и сеть</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main>
+  <h1>Файлы и сеть</h1>
+  <p class="hint">Демонстрация прав <code>files</code> и <code>internet</code>.</p>
+  <p id="env" class="env"></p>
+
+  <section>
+    <h2>Приватное хранилище</h2>
+    <textarea id="note" rows="4" placeholder="Текст заметки"></textarea>
+    <div class="row">
+      <button id="savePrivate">Сохранить в приложение</button>
+      <button id="loadPrivate">Загрузить</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Файлы устройства <span class="perm">files</span></h2>
+    <div class="row">
+      <button id="export">Экспорт заметки</button>
+      <button id="import">Импорт файла</button>
+    </div>
+    <p id="fileInfo" class="info"></p>
+  </section>
+
+  <section>
+    <h2>Сеть <span class="perm">internet</span></h2>
+    <input id="url" type="url" value="https://api.github.com/repos/AlexeyNaverno/EasyAnyHtmlUIProgramm">
+    <button id="fetch">Запросить</button>
+    <pre id="netOut"></pre>
+  </section>
+</main>
+<script src="./app.js"></script>
+</body>
+</html>

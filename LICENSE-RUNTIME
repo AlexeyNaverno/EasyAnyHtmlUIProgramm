@@ -1,0 +1,39 @@
+EasyApp Runtime Library Exception
+=================================
+
+Additional permission under section 7 of the GNU General Public License,
+version 3, as published by the Free Software Foundation.
+
+The following files form the "EasyApp Runtime":
+
+  packages/core/runtime/bridge.js
+  native/host/bridge_core.c
+  native/host/bridge_core.h
+  native/host/host_windows.c
+  native/host/host_linux.c
+  native/installer/installer_windows.c
+  native/installer/tinyzip.c
+  native/installer/tinyzip.h
+  templates/runtime-android/app/src/main/java/org/easyapp/runtime/MainActivity.kt
+
+If you compile an application with EasyAnyHtmlUIProgramm and the compiler
+embeds the EasyApp Runtime into the resulting artefact, you may convey that
+artefact under terms of your choice, provided that:
+
+  1. Your application is an independent work: it is supplied as HTML, CSS,
+     JavaScript or other assets and is not itself a derivative of the EasyApp
+     Runtime or of the compiler.
+
+  2. You comply with the GNU GPL version 3 (or any later version) for the
+     EasyApp Runtime itself, including providing its complete corresponding
+     source code or a written offer for it, and keeping its notices intact.
+
+  3. You do not remove or alter this exception from the Runtime files.
+
+This exception does not apply to the compiler proper (the packages/ and apps/
+directories other than the runtime bridge, the build scripts and the CI
+configuration), which remains licensed under GPL-3.0-or-later with no
+additional permission.
+
+This exception is intended to work like the GCC Runtime Library Exception:
+using a GPL tool to produce an output does not make that output GPL.
