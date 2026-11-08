@@ -91,7 +91,13 @@ test('source-project contains gradle files, native sources and assets', async ()
 });
 
 test('android target exports a buildable project when the SDK is missing', async () => {
-  await assert.rejects(
+  // Force the "no SDK" path so the result does not depend on the machine:
+  // CI runners ship a full Android SDK, where this would otherwise build an APK.
+  const saved = { home: process.env.ANDROID_HOME, root: process.env.ANDROID_SDK_ROOT };
+  delete process.env.ANDROID_HOME;
+  delete process.env.ANDROID_SDK_ROOT;
+  try {
+    await assert.rejects(
     () => compile(strToU8(HTML), { filename: 'index.html', target: 'android-apk', outDir: work }),
     (err) => {
       // With no SDK the compiler must still hand back a usable project.
@@ -102,8 +108,14 @@ test('android target exports a buildable project when the SDK is missing', async
       assert.ok(files['app/src/main/assets/www/index.html']);
       assert.ok(files['gradle.properties']);
       return true;
-    },
-  );
+      },
+    );
+  } finally {
+    if (saved.home === undefined) delete process.env.ANDROID_HOME;
+    else process.env.ANDROID_HOME = saved.home;
+    if (saved.root === undefined) delete process.env.ANDROID_SDK_ROOT;
+    else process.env.ANDROID_SDK_ROOT = saved.root;
+  }
 });
 
 test('windows x64 installer embeds a valid PE host and payload', { skip: !zig.available }, async () => {

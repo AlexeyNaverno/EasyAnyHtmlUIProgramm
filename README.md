@@ -157,7 +157,7 @@ node apps/cli/src/index.mjs prompt --lang ru -o prompt.txt
 | `windows-x86` | то же для 32-битных систем | Zig |
 | `windows-portable-x64` | `.zip` без установки | Zig |
 | `linux-x64` | `.zip` с нативным хостом и `install.sh` | C-компилятор, WebKitGTK 4.1 |
-| `android-apk` | `.apk` (Android 7.0+) | JDK 17, Android SDK, Gradle |
+| `android-apk` | `.apk` (Android 7.0+) | JDK 17/21, Android SDK, Gradle 8.7 |
 | `web-bundle` | нормализованный `.zip` с мостом | — |
 | `source-project` | полные исходники для ручной сборки и F-Droid | — |
 

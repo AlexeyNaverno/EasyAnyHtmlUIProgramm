@@ -45,8 +45,9 @@ export function run(cmd, args, { cwd, env, quiet = false } = {}) {
 
 async function probe(cmd, args) {
   try {
-    const { stdout } = await run(cmd, args, { quiet: true });
-    return { available: true, version: stdout.trim().split('\n')[0].slice(0, 120) };
+    const { stdout, stderr } = await run(cmd, args, { quiet: true });
+    const text = (stdout.trim() || stderr.trim());
+    return { available: true, version: text.split('\n')[0].slice(0, 120) };
   } catch {
     return { available: false, version: null };
   }
@@ -62,6 +63,25 @@ export async function findZig() {
   return { available: false, version: null };
 }
 
+/**
+ * Gradle 8.7 runs on JDK 8..21. Newer JDKs make it abort with a cryptic
+ * "IllegalArgumentException: <version>", so detect the mismatch up front.
+ */
+export const GRADLE_MAX_JDK = 21;
+
+export function parseJavaMajor(version) {
+  if (!version) return null;
+  const m = /(\d+)(?:\.(\d+))?/.exec(version);
+  if (!m) return null;
+  const first = Number(m[1]);
+  // Legacy scheme: 1.8.0_402 means Java 8.
+  return first === 1 ? Number(m[2] || 0) : first;
+}
+
+export function jdkSupportedByGradle(major) {
+  return major === null || (major >= 8 && major <= GRADLE_MAX_JDK);
+}
+
 export async function doctor() {
   const zig = await findZig();
   const java = await probe('java', ['-version']);
@@ -70,10 +90,16 @@ export async function doctor() {
   const gradle = await probe('gradle', ['--version']);
   const pkgConfig = await probe('pkg-config', ['--exists', 'webkit2gtk-4.1']);
   const androidHome = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || null;
+  const javaMajor = parseJavaMajor(javac.version || java.version);
 
   return {
     zig: { available: zig.available, version: zig.version },
-    java: { available: java.available && javac.available, version: javac.version },
+    java: {
+      available: java.available && javac.available,
+      version: javac.version || java.version,
+      major: javaMajor,
+      gradleSupported: jdkSupportedByGradle(javaMajor),
+    },
     androidSdk: { available: Boolean(androidHome && existsSync(androidHome)), path: androidHome },
     gradle: { available: gradle.available, version: gradle.version },
     cc: { available: cc.available, version: cc.version },
@@ -205,6 +231,16 @@ export async function buildAndroidApk({ projectDir, release = false, signing = n
     throw new Error(
       'Android SDK was not found. Set ANDROID_HOME, or build the generated project in CI.\n'
       + 'Install: https://developer.android.com/studio#command-tools (cmdline-tools + platform 34 + build-tools)',
+    );
+  }
+  const javac = await probe('javac', ['-version']);
+  const javaMajor = parseJavaMajor(javac.version);
+  if (!process.env.EASYAPP_SKIP_JDK_CHECK && !jdkSupportedByGradle(javaMajor)) {
+    throw new Error(
+      `JDK ${javaMajor} is too new for Gradle 8.7 (supported: 8-${GRADLE_MAX_JDK}).\n`
+      + 'Install JDK 17 or 21 and point JAVA_HOME at it, for example:\n'
+      + '  export JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64\n'
+      + 'Set EASYAPP_SKIP_JDK_CHECK=1 to try anyway.',
     );
   }
   writeFileSync(join(projectDir, 'local.properties'), `sdk.dir=${androidHome}\n`);

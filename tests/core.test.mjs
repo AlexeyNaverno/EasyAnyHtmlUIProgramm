@@ -328,3 +328,32 @@ test('packZip normalises non-Uint8Array values instead of making directories', a
   assert.equal(Buffer.from(out['from-string.txt']).toString(), 'hi');
   assert.equal(Buffer.from(out['from-bytes.txt']).toString(), 'y');
 });
+
+/* --------------------------------------------------- JDK compatibility */
+
+test('parseJavaMajor understands modern and legacy version schemes', async () => {
+  const { parseJavaMajor, jdkSupportedByGradle, GRADLE_MAX_JDK } =
+    await import('../packages/core/src/toolchain.js');
+  assert.equal(parseJavaMajor('javac 17.0.11'), 17);
+  assert.equal(parseJavaMajor('openjdk version "25.0.5" 2026-10-20'), 25);
+  assert.equal(parseJavaMajor('javac 1.8.0_402'), 8);
+  assert.equal(parseJavaMajor('javac 21'), 21);
+  assert.equal(parseJavaMajor(''), null);
+  assert.equal(parseJavaMajor(null), null);
+  assert.equal(parseJavaMajor('no digits here'), null);
+
+  assert.equal(jdkSupportedByGradle(17), true);
+  assert.equal(jdkSupportedByGradle(GRADLE_MAX_JDK), true);
+  // JDK 25 is what broke CI: Gradle 8.7 aborts on its version string.
+  assert.equal(jdkSupportedByGradle(25), false);
+  assert.equal(jdkSupportedByGradle(7), false);
+  // Unknown version must not block the build.
+  assert.equal(jdkSupportedByGradle(null), true);
+});
+
+test('doctor reports the JDK major and Gradle compatibility', async () => {
+  const { doctor } = await import('../packages/core/src/toolchain.js');
+  const report = await doctor();
+  assert.ok('major' in report.java);
+  assert.equal(typeof report.java.gradleSupported, 'boolean');
+});

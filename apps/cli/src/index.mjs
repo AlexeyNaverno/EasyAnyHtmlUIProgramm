@@ -124,12 +124,17 @@ async function main() {
         ['WebKitGTK 4.1 (Linux)', report.webkit2gtk],
       ];
       for (const [label, info] of rows) {
-        const mark = info.available ? 'OK  ' : 'нет ';
+        const bad = info.available && info.gradleSupported === false;
+        const mark = bad ? '!!  ' : (info.available ? 'OK  ' : 'нет ');
         console.log(`  [${mark}] ${label.padEnd(24)} ${info.version || info.path || ''}`);
       }
       console.log('\nПодсказки:');
       if (!report.zig.available) console.log('  Zig:        pip install ziglang   (или https://ziglang.org/download/)');
       if (!report.java.available) console.log('  JDK:        sudo apt install openjdk-17-jdk');
+      else if (!report.java.gradleSupported) {
+        console.log(`  JDK ${report.java.major} слишком новый для Gradle 8.7 (нужен 8-21).`);
+        console.log('              Поставьте JDK 17 или 21 и укажите JAVA_HOME.');
+      }
       if (!report.androidSdk.available) console.log('  Android SDK: https://developer.android.com/studio#command-tools, затем export ANDROID_HOME=...');
       if (!report.webkit2gtk.available) console.log('  WebKitGTK:  sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev');
       console.log('\nБез тулчейна доступны цели: web-bundle, source-project.');

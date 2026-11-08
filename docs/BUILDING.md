@@ -6,7 +6,7 @@
 |---|---|---|
 | Windows x64/x86 | Zig 0.13+ | `pip install ziglang` |
 | Linux x64 | C-компилятор, GTK3, WebKitGTK 4.1 | `apt install build-essential libgtk-3-dev libwebkit2gtk-4.1-dev` |
-| Android | JDK 17, Android SDK (platform 34, build-tools 34), Gradle 8.7 | см. ниже |
+| Android | JDK 17 или 21, Android SDK (platform 34, build-tools 34), Gradle 8.7 | см. ниже |
 | web-bundle, source-project | только Node 20+ | — |
 
 Проверить, что уже есть:
@@ -48,7 +48,10 @@ unzip MyApp-linux-x64.zip -d myapp && cd myapp && ./install.sh
 ## Android
 
 ```bash
-# 1. JDK 17
+# 1. JDK 17 (или 21)
+# Gradle 8.7 работает на JDK 8-21. Более новый JDK (например 25) вызывает
+# невнятную ошибку "IllegalArgumentException: 25.0.5" — компилятор проверяет
+# версию заранее и подсказывает решение. Проверить: easyapp doctor
 sudo apt install openjdk-17-jdk
 
 # 2. Android command line tools
