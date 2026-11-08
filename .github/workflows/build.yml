@@ -197,25 +197,7 @@ jobs:
           (cd examples/files-and-net && zip -qr ../../files-and-net.zip .)
           node scripts/ci-run.mjs -- node apps/cli/src/index.mjs build files-and-net.zip -t android-apk -o out-ondevice
       - name: Verify the hand-built APKs with aapt2, zipalign and apksigner
-        run: |
-          BT="$ANDROID_HOME/build-tools/34.0.0"
-          for apk in out-ondevice/*.apk; do
-            echo "=== $apk ==="
-            "$BT/aapt2" dump badging "$apk"
-            "$BT/zipalign" -c -v 4 "$apk" | tail -3
-            "$BT/apksigner" verify --verbose --print-certs "$apk"
-          done
-      - name: Confirm the internet permission is conditional
-        run: |
-          BT="$ANDROID_HOME/build-tools/34.0.0"
-          "$BT/aapt2" dump badging out-ondevice/Hello_EasyApp.apk > /tmp/hello.txt
-          "$BT/aapt2" dump badging out-ondevice/Files_and_Net_Demo.apk > /tmp/net.txt
-          if grep -q "android.permission.INTERNET" /tmp/hello.txt; then
-            echo "::error::Hello must not request INTERNET"; exit 1
-          fi
-          grep -q "android.permission.INTERNET" /tmp/net.txt || {
-            echo "::error::Files_and_Net_Demo must request INTERNET"; exit 1; }
-          echo "Permission gating verified by aapt2"
+        run: node scripts/ci-run.mjs -- node scripts/verify-apk.mjs out-ondevice
       - uses: actions/upload-artifact@v4
         with:
           name: ondevice-apk
