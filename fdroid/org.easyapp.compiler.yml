@@ -22,9 +22,9 @@ RepoType: git
 Repo: https://github.com/AlexeyNaverno/EasyAnyHtmlUIProgramm.git
 
 Builds:
-  - versionName: 0.1.0
-    versionCode: 1
-    commit: v0.1.0
+  - versionName: 0.2.0
+    versionCode: 2
+    commit: v0.2.0-rc.1
     subdir: templates/runtime-android
     sudo:
       - apt-get update

@@ -100,7 +100,8 @@ async function main() {
   const directives = [
     '<!-- easyapp:name EasyApp Compiler -->',
     '<!-- easyapp:id org.easyapp.compiler -->',
-    '<!-- easyapp:version 0.1.0 -->',
+    '<!-- easyapp:version 0.2.0 -->',
+    '<!-- easyapp:versioncode 2 -->',
     '<!-- easyapp:permission files -->',
     '<!-- easyapp:description Компилятор HTML/ZIP в APK, EXE и Linux -->',
   ].join('\n');

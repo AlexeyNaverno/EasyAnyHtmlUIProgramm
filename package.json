@@ -1,6 +1,6 @@
 {
   "name": "easyanyhtmluiprogramm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "HTML/ZIP to native APK/EXE/Linux compiler",
   "license": "GPL-3.0-or-later",
