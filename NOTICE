@@ -1,0 +1,33 @@
+EasyAnyHtmlUIProgramm
+Copyright (C) 2026 AlexeyNaverno and contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See LICENSE.
+
+RUNTIME EXCEPTION
+The EasyApp runtime files that the compiler copies into a generated
+application (packages/core/runtime/bridge.js, native/host/*, native/installer/*
+and the Android runtime activity) carry an additional permission: bundling
+them with your own independent HTML/CSS/JS application does not by itself
+subject that application to the GPL. You may license your generated app as you
+wish. The compiler itself remains plain GPL-3.0-or-later. See LICENSE-RUNTIME.
+
+Bundled third-party sources (see native/third_party/README.md):
+
+  cJSON 1.7.18 — MIT — Dave Gamble and cJSON contributors
+  WebView2 SDK interface headers — BSD-3-Clause — Microsoft Corporation
+  Gradle wrapper scripts 8.7 — Apache-2.0 — Gradle Inc.
+
+Build-time tools (not distributed in the output):
+
+  Node.js, esbuild (MIT), fflate (MIT), Zig (MIT),
+  OpenJDK (GPLv2+CE), Android SDK, Gradle (Apache-2.0),
+  GTK/WebKitGTK (LGPL), Microsoft Edge WebView2 Runtime (system component).
+
+Generated applications contain only:
+  - your own HTML/CSS/JS assets,
+  - the EasyApp bridge (GPL-3.0-or-later),
+  - a native host compiled from this repository's sources,
+  - cJSON (MIT) statically linked into the desktop host.

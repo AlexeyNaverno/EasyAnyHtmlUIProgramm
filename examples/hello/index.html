@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- easyapp:name Hello EasyApp -->
+<!-- easyapp:id org.easyapp.examples.hello -->
+<!-- easyapp:version 1.0.0 -->
+<title>Hello EasyApp</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 24px;
+         display: grid; place-content: center; min-height: 100vh; text-align: center; }
+  h1 { font-size: 1.6rem; margin: 0 0 8px; }
+  p { opacity: .75; margin: 4px 0; }
+  button { font: inherit; padding: 10px 18px; border-radius: 10px; border: 1px solid currentColor;
+           background: transparent; color: inherit; cursor: pointer; margin-top: 16px; }
+  code { font-size: .85rem; opacity: .8; }
+</style>
+</head>
+<body>
+  <main>
+    <h1>Привет из скомпилированного приложения</h1>
+    <p>Это один HTML-файл, собранный в нативный бинарник.</p>
+    <p><code id="env">проверка окружения…</code></p>
+    <button id="count">Нажато 0 раз</button>
+  </main>
+<script>
+  const env = document.getElementById('env');
+  if (window.easyapp) {
+    const info = easyapp.info();
+    env.textContent = info.name + ' · права: ' + (info.permissions.join(', ') || 'нет');
+  } else {
+    env.textContent = 'открыто в браузере (без нативного рантайма)';
+  }
+  let n = 0;
+  const btn = document.getElementById('count');
+  btn.onclick = async () => {
+    n += 1;
+    btn.textContent = 'Нажато ' + n + ' раз';
+    if (window.easyapp) await easyapp.storage.set('count', String(n));
+  };
+  if (window.easyapp) {
+    easyapp.storage.get('count').then(v => {
+      n = Number(v || 0);
+      btn.textContent = 'Нажато ' + n + ' раз';
+    }).catch(() => {});
+  }
+</script>
+</body>
+</html>

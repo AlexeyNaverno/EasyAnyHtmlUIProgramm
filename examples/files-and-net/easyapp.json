@@ -1,0 +1,8 @@
+{
+  "id": "org.easyapp.examples.filesnet",
+  "name": "Files and Net Demo",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "permissions": ["internet", "files"],
+  "description": "Демонстрация доступа к файлам устройства и сети"
+}

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EasyAnyHtmlUIProgramm — компилятор</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>EasyAnyHtmlUIProgramm</h1>
+    <p class="sub">HTML или ZIP → готовый .apk / .exe / Linux. Полностью открытый исходный код.</p>
+  </div>
+  <button id="promptBtn" class="primary">Промт для LLM</button>
+</header>
+
+<main class="layout">
+  <!-- ---------------------------------------------------- input -->
+  <section class="card">
+    <h2>1. Исходный файл</h2>
+    <div id="drop" class="drop">
+      <input type="file" id="file" accept=".html,.htm,.zip" hidden>
+      <p class="drop-title">Перетащите .html или .zip</p>
+      <p class="drop-hint">или <button id="pick" class="link">выберите файл</button></p>
+      <p id="fileName" class="file-name"></p>
+    </div>
+    <div id="inspectOut" class="inspect" hidden></div>
+  </section>
+
+  <!-- ---------------------------------------------------- settings -->
+  <section class="card">
+    <h2>2. Настройки и права</h2>
+    <div class="grid">
+      <label>Название<input id="appName" type="text" placeholder="из файла"></label>
+      <label>Идентификатор<input id="appId" type="text" placeholder="org.example.app"></label>
+      <label>Версия<input id="appVersion" type="text" placeholder="1.0.0"></label>
+    </div>
+
+    <h3>Права доступа</h3>
+    <p class="note">Комментарии <code>&lt;!-- easyapp:permission … --&gt;</code> в HTML включат галочки автоматически.
+      Галочки можно менять вручную — они имеют приоритет.</p>
+    <label class="check">
+      <input type="checkbox" id="permInternet">
+      <span><b>Доступ в интернет</b><br><small>Нативные HTTP-запросы без ограничений CORS</small></span>
+    </label>
+    <label class="check">
+      <input type="checkbox" id="permFiles">
+      <span><b>Файлы устройства</b><br><small>Импорт и экспорт через системные диалоги</small></span>
+    </label>
+    <p class="note small">Приватное хранилище приложения и настройки доступны всегда и не требуют прав.</p>
+  </section>
+
+  <!-- ---------------------------------------------------- build -->
+  <section class="card">
+    <h2>3. Сборка</h2>
+    <label class="target-label">Целевая платформа
+      <select id="target"></select>
+    </label>
+    <p id="targetDesc" class="note"></p>
+    <div id="toolchain" class="toolchain"></div>
+    <button id="buildBtn" class="primary wide" disabled>Собрать</button>
+    <div id="buildOut" class="build-out" hidden></div>
+  </section>
+</main>
+
+<!-- ---------------------------------------------------- prompt modal -->
+<div id="promptModal" class="modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>Промт для LLM</h2>
+      <div class="modal-actions">
+        <select id="promptLang"><option value="ru">Русский</option><option value="en">English</option></select>
+        <button id="copyPrompt" class="primary">Скопировать</button>
+        <button id="closePrompt" class="link">Закрыть</button>
+      </div>
+    </div>
+    <p class="note">Вставьте этот текст в ChatGPT, Claude или другую модель, затем опишите нужное приложение.
+      Модель вернёт код, совместимый с компилятором.</p>
+    <textarea id="promptText" readonly spellcheck="false"></textarea>
+  </div>
+</div>
+
+<footer class="foot">
+  <span>GPL-3.0-or-later · сборка из исходников · подходит для F-Droid</span>
+  <span id="status" class="status"></span>
+</footer>
+
+<script src="./app.js" type="module"></script>
+</body>
+</html>

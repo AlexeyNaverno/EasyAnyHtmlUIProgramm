@@ -1,0 +1,37 @@
+# Dependencies and build output
+node_modules/
+build/
+dist/
+out/
+release/
+dist-smoke/
+*.log
+
+# Generated Android artefacts (reproduced by scripts/prepare-fdroid.mjs)
+templates/runtime-android/app/src/main/assets/
+templates/runtime-android/gradle/wrapper/gradle-wrapper.jar
+templates/runtime-android/.gradle/
+templates/runtime-android/**/build/
+templates/runtime-android/local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Native build output
+*.o
+*.obj
+*.res
+*.exe
+!native/**/src/*.exe
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Python (Zig wheel)
+.venv/
+__pycache__/
