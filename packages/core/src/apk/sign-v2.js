@@ -71,28 +71,35 @@ async function importPrivateKey(pkcs8) {
 }
 
 /**
- * v2 digests the APK in three sections, each split into 1 MiB chunks prefixed
- * with 0xa5 and the chunk length. Web Crypto has no streaming digest, so the
- * prefixed input is materialised once; for typical bundles that is a few MB.
+ * v2 content digest, per AOSP ApkSigningBlockUtils.computeOneMbChunkContentDigests:
+ *
+ *   1. Split each section into consecutive 1 MiB chunks. Empty sections
+ *      contribute no chunks at all.
+ *   2. chunkDigest = SHA-256(0xa5 || uint32le(chunk length) || chunk)
+ *   3. digest = SHA-256(0x5a || uint32le(chunk count) || chunkDigests in order)
+ *
+ * The second level is easy to miss and produces a signature that apksigner
+ * rejects with "CHUNKED_SHA256 digest mismatch". Hashing chunk by chunk also
+ * keeps peak memory at one chunk instead of a copy of the whole APK.
  */
-function digestInput(sections) {
-  const parts = [];
+async function contentDigest(sections) {
+  const s = subtle();
+  const chunkDigests = [];
   for (const section of sections) {
     for (let at = 0; at < section.length; at += CHUNK_SIZE) {
       const chunk = section.subarray(at, Math.min(at + CHUNK_SIZE, section.length));
-      const prefix = new Uint8Array(5);
-      prefix[0] = 0xa5;
-      new DataView(prefix.buffer).setUint32(1, chunk.length, true);
-      parts.push(prefix, chunk);
-    }
-    // An empty section still contributes one zero-length chunk.
-    if (section.length === 0) {
-      const prefix = new Uint8Array(5);
-      prefix[0] = 0xa5;
-      parts.push(prefix);
+      const buf = new Uint8Array(5 + chunk.length);
+      buf[0] = 0xa5;
+      new DataView(buf.buffer).setUint32(1, chunk.length, true);
+      buf.set(chunk, 5);
+      chunkDigests.push(new Uint8Array(await s.digest('SHA-256', buf)));
     }
   }
-  return concat(parts);
+  const top = new Uint8Array(5 + chunkDigests.length * 32);
+  top[0] = 0x5a;
+  new DataView(top.buffer).setUint32(1, chunkDigests.length, true);
+  chunkDigests.forEach((d, i) => top.set(d, 5 + i * 32));
+  return new Uint8Array(await s.digest('SHA-256', top));
 }
 
 /**
@@ -114,11 +121,11 @@ export async function signApkV2(zip, identity) {
   new DataView(eocd.buffer, eocd.byteOffset, eocd.byteLength)
     .setUint32(16, centralDirOffset, true);
 
-  const digest = new Uint8Array(await s.digest('SHA-256', digestInput([
+  const digest = await contentDigest([
     bytes.subarray(0, centralDirOffset),
     bytes.subarray(centralDirOffset, eocdOffset),
     eocd,
-  ])));
+  ]);
 
   const digestEntry = concat([new Writer(4).u32(SIG_RSA_PKCS1_SHA256).done(), lp(digest)]);
   const signedData = concat([

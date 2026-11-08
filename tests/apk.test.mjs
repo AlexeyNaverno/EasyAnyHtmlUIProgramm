@@ -307,17 +307,22 @@ test('v2 signature verifies and the content digest matches', async () => {
 
   const patched = apk.slice(eocdAt);
   new DataView(patched.buffer, patched.byteOffset).setUint32(16, blockStart, true);
-  const h = createHash('sha256');
+  // Two-level digest: per-chunk SHA-256, then SHA-256 of 0x5a|count|digests.
+  const chunkHashes = [];
   for (const section of [apk.subarray(0, blockStart), apk.subarray(cdOffset, eocdAt), patched]) {
     for (let i = 0; i < section.length; i += 1 << 20) {
       const chunk = section.subarray(i, Math.min(i + (1 << 20), section.length));
       const prefix = Buffer.alloc(5);
       prefix[0] = 0xa5;
       prefix.writeUInt32LE(chunk.length, 1);
-      h.update(prefix);
-      h.update(chunk);
+      chunkHashes.push(createHash('sha256').update(prefix).update(chunk).digest());
     }
   }
+  const top = Buffer.alloc(5 + chunkHashes.length * 32);
+  top[0] = 0x5a;
+  top.writeUInt32LE(chunkHashes.length, 1);
+  chunkHashes.forEach((d, i) => d.copy(top, 5 + i * 32));
+  const h = createHash('sha256').update(top);
   assert.deepEqual(new Uint8Array(h.digest()), claimed, 'content digest matches');
 });
 
