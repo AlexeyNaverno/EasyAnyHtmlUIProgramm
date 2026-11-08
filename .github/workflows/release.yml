@@ -121,6 +121,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - run: node scripts/setup-gradle-wrapper.mjs templates/runtime-android
+      - name: Build the generic runtimes from source
+        run: node scripts/ci-run.mjs -- node scripts/build-runtimes.mjs --strict
       - name: Self-host the compiler
         run: |
           node scripts/ci-run.mjs -- node scripts/build-ui.mjs --strict windows-x64 windows-x86 windows-portable-x64 linux-x64 android-apk source-project

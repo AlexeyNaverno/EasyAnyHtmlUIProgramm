@@ -153,6 +153,8 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: Generate the Gradle wrapper
         run: node scripts/setup-gradle-wrapper.mjs templates/runtime-android
+      - name: Build the generic runtimes from source
+        run: node scripts/ci-run.mjs -- node scripts/build-runtimes.mjs --strict
       - name: Package the compiler with its own engine
         run: |
           node scripts/ci-run.mjs -- node scripts/build-ui.mjs --strict windows-x64 windows-x86 windows-portable-x64 linux-x64 android-apk source-project
@@ -163,3 +165,58 @@ jobs:
             dist/compiler/*.exe
             dist/compiler/*.zip
             dist/compiler/*.apk
+
+  ondevice:
+    name: On-device packaging (verified with real Android tools)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify the preinstalled Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -d "$ANDROID_HOME/platforms/android-34" || sdkmanager "platforms;android-34"
+          test -d "$ANDROID_HOME/build-tools/34.0.0" || sdkmanager "build-tools;34.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - run: npm ci || npm install
+      - name: Generate the Gradle wrapper from source
+        run: node scripts/setup-gradle-wrapper.mjs templates/runtime-android
+      - name: Build the generic Android runtime DEX
+        run: node scripts/ci-run.mjs -- node scripts/build-runtimes.mjs --strict android
+      - name: Assemble APKs in pure JS (no Gradle involved)
+        run: |
+          node scripts/ci-run.mjs -- node apps/cli/src/index.mjs build examples/hello/index.html -t android-apk -o out-ondevice
+          (cd examples/files-and-net && zip -qr ../../files-and-net.zip .)
+          node scripts/ci-run.mjs -- node apps/cli/src/index.mjs build files-and-net.zip -t android-apk -o out-ondevice
+      - name: Verify the hand-built APKs with aapt2, zipalign and apksigner
+        run: |
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          for apk in out-ondevice/*.apk; do
+            echo "=== $apk ==="
+            "$BT/aapt2" dump badging "$apk"
+            "$BT/zipalign" -c -v 4 "$apk" | tail -3
+            "$BT/apksigner" verify --verbose --print-certs "$apk"
+          done
+      - name: Confirm the internet permission is conditional
+        run: |
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          "$BT/aapt2" dump badging out-ondevice/Hello_EasyApp.apk > /tmp/hello.txt
+          "$BT/aapt2" dump badging out-ondevice/Files_and_Net_Demo.apk > /tmp/net.txt
+          if grep -q "android.permission.INTERNET" /tmp/hello.txt; then
+            echo "::error::Hello must not request INTERNET"; exit 1
+          fi
+          grep -q "android.permission.INTERNET" /tmp/net.txt || {
+            echo "::error::Files_and_Net_Demo must request INTERNET"; exit 1; }
+          echo "Permission gating verified by aapt2"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ondevice-apk
+          path: out-ondevice/*.apk
