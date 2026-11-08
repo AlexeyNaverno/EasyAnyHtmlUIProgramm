@@ -121,6 +121,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - run: node scripts/setup-gradle-wrapper.mjs templates/runtime-android
+      - name: Build the generic runtimes from source
+        run: node scripts/ci-run.mjs -- node scripts/build-runtimes.mjs --strict
       - name: Self-host the compiler
         run: |
           node scripts/ci-run.mjs -- node scripts/build-ui.mjs --strict windows-x64 windows-x86 windows-portable-x64 linux-x64 android-apk source-project
@@ -175,25 +177,51 @@ jobs:
           files: |
             artefacts/*
           body: |
-            > **Пререлиз.** Собран для проверки, интерфейс и формат артефактов
-            > ещё могут меняться. Windows-сборки проверены автотестами,
-            > APK и Linux-пакет собраны из исходников в CI.
+            ${{ steps.kind.outputs.prerelease == 'true' && '> **Пререлиз.** Собран для проверки; интерфейс и формат артефактов ещё могут меняться.' || '' }}
 
-            Все артефакты собраны из исходников этим workflow.
+            Все артефакты собраны из исходников этим workflow. Бинарных блобов
+            в репозитории нет.
 
-            ## Компилятор
-            - `EasyApp_Compiler-setup-x64.exe` / `-x86.exe` — установщики компилятора для Windows
-            - `EasyApp_Compiler-windows-x64-portable.zip` — portable-версия
-            - `EasyApp_Compiler-linux-x64.zip` — компилятор для Linux (`install.sh`)
-            - `EasyApp_Compiler.apk` — компилятор для Android
-            - `EasyApp_Compiler-source.zip` — исходники
+            ## Компилятор собирает на самом устройстве
 
-            ## Примеры приложений
-            - `Hello_EasyApp-*` — минимальный пример без прав
-            - `Files_and_Net_Demo-*` — пример с правами `files` и `internet`
+            В каждую сборку компилятора встроены универсальные рантаймы, поэтому
+            он доводит сборку до конца там, где запущен: `.apk` на телефоне,
+            `.exe` и Linux-пакет на ПК — без интернета и без тулчейна на устройстве.
+            Нативный код не зависит от вашего HTML, поэтому Zig, JDK и Android SDK
+            нужны один раз при сборке самого компилятора. Дополнительных требований
+            к ОЗУ нет.
+
+            ## Файлы
+
+            | Файл | Что это |
+            |---|---|
+            | `EasyApp_Compiler-setup-x64.exe` / `-x86.exe` | установщики для Windows |
+            | `EasyApp_Compiler-windows-x64-portable.zip` | portable-версия |
+            | `EasyApp_Compiler-linux-x64.zip` | Linux, внутри `install.sh` |
+            | `EasyApp_Compiler.apk` | Android, собирает APK на телефоне |
+            | `EasyApp_Compiler-source.zip` | исходники релиза |
+            | `Hello_EasyApp-*` | пример без прав, все платформы |
+            | `Files_and_Net_Demo-*` | пример с правами `files` и `internet` |
+
+            ## Как проверено
+
+            - Автотесты ядра, упаковки и интерфейса, включая сборку на устройстве.
+            - Windows-установщики: разбор PE-заголовков и payload.
+            - APK, собранный вручную на JS: `aapt2 dump badging`, `zipalign -c`
+              и `apksigner verify` в CI, плюс проверка выдачи прав через `aapt2`.
+
+            Не проверено: запуск на реальном устройстве — в CI нет ни эмулятора,
+            ни дисплея. Артефакты собраны и провалидированы, первый запуск за вами.
+
+            ## Ключ подписи Android
+
+            Создаётся на устройстве при первой сборке и хранится в приватных файлах
+            приложения (в CLI — `~/.easyapp/signing-identity.json`). Сохраните его:
+            без него обновление нельзя поставить поверх старого приложения.
 
             ## Требования к запуску
-            - Windows: Microsoft Edge WebView2 Runtime (предустановлен в Windows 11)
+
+            - Windows: Microsoft Edge WebView2 Runtime (есть в Windows 11)
             - Linux: `libwebkit2gtk-4.1-0`, `libgtk-3-0`
             - Android: 7.0+ (API 24)
 

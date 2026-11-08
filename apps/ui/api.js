@@ -3,8 +3,11 @@
  *
  * Server mode: talks to the local Node server, which can run native toolchains.
  * Standalone mode: runs the pure-JS core inside the compiled app (WebView) and
- * uses the easyapp bridge for file access. Native targets are unavailable there
- * and the UI explains why instead of failing silently.
+ * uses the easyapp bridge for file access. Native targets work there too when
+ * the generic runtimes are embedded at build time: the hosts, installer and
+ * Android DEX do not depend on the user's bundle, so packaging needs no Zig,
+ * JDK or Android SDK on the device. Targets whose runtime is missing are
+ * disabled with an explanation rather than failing silently.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -12,6 +15,8 @@
 import {
   loadBundle, lintBundle, describeTargets, buildLlmPrompt,
   buildWwwTree, buildAndroidProject, normalizeTree, packZip, strToU8,
+  packageWindows, packageLinux, packageApk, safeStem,
+  identityToBase64, identityFromBase64,
 } from './core-browser.js';
 
 const enc = new TextEncoder();
@@ -117,16 +122,124 @@ async function saveArtefact(filename, bytes) {
   return { saved: true, filename, blobUrl: url };
 }
 
+/* ------------------------------------------------- embedded native runtimes */
+
+const RUNTIME_FILES = {
+  windowsX64: ['windows-host-x64.exe', 'windows-installer-x64.exe'],
+  windowsX86: ['windows-host-x86.exe', 'windows-installer-x86.exe'],
+  linuxX64: ['linux-host-x64'],
+  android: ['android-runtime.dex'],
+};
+
+function decodeBase64(b64) {
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+let runtimeCache = null;
+function embeddedRuntimes() {
+  if (runtimeCache) return runtimeCache;
+  runtimeCache = new Map();
+  for (const [name, b64] of Object.entries(globalThis.__EASYAPP_RUNTIMES__ || {})) {
+    runtimeCache.set(name, decodeBase64(b64));
+  }
+  return runtimeCache;
+}
+
+const hasAll = (names) => names.every((n) => embeddedRuntimes().has(n));
+
+/** Which targets this build of the app can finish on its own. */
+function standaloneAvailability() {
+  return {
+    'windows-x64': hasAll(RUNTIME_FILES.windowsX64),
+    'windows-x86': hasAll(RUNTIME_FILES.windowsX86),
+    'windows-portable-x64': embeddedRuntimes().has('windows-host-x64.exe'),
+    'linux-x64': hasAll(RUNTIME_FILES.linuxX64),
+    'android-apk': hasAll(RUNTIME_FILES.android),
+    'web-bundle': true,
+    'source-project': true,
+  };
+}
+
+/* The signing key must survive restarts or apps cannot be updated in place. */
+const IDENTITY_FILE = 'signing-identity.json';
+
+async function loadIdentity() {
+  try {
+    if (typeof window.easyapp !== 'undefined' && window.easyapp.privateFiles) {
+      const text = await window.easyapp.privateFiles.readText(IDENTITY_FILE);
+      return identityFromBase64(JSON.parse(text));
+    }
+    const text = localStorage.getItem('easyapp.signingIdentity');
+    if (text) return identityFromBase64(JSON.parse(text));
+  } catch { /* first run, or unreadable: a new key will be created */ }
+  return null;
+}
+
+async function storeIdentity(identity) {
+  const text = JSON.stringify(identityToBase64(identity));
+  try {
+    if (typeof window.easyapp !== 'undefined' && window.easyapp.privateFiles) {
+      await window.easyapp.privateFiles.write(IDENTITY_FILE, enc.encode(text));
+      return;
+    }
+    localStorage.setItem('easyapp.signingIdentity', text);
+  } catch { /* storage may be unavailable; the APK is still produced */ }
+}
+
+/** Build a native artefact from embedded runtimes. Returns null if unsupported. */
+async function buildNative(bundle, target, log) {
+  const rt = embeddedRuntimes();
+  if (target === 'windows-x64' || target === 'windows-x86' || target === 'windows-portable-x64') {
+    const arch = target === 'windows-x86' ? 'x86' : 'x64';
+    const kind = target === 'windows-portable-x64' ? 'portable' : 'installer';
+    log.push(`Встроенный рантайм Windows ${arch}: компилятор не требуется`);
+    return packageWindows(bundle, BRIDGE_JS, {
+      host: rt.get(`windows-host-${arch}.exe`),
+      installer: rt.get(`windows-installer-${arch}.exe`),
+    }, { arch, kind });
+  }
+  if (target === 'linux-x64') {
+    log.push('Встроенный рантайм Linux: компилятор не требуется');
+    return packageLinux(bundle, BRIDGE_JS, { host: rt.get('linux-host-x64') }, { arch: 'x64' });
+  }
+  if (target === 'android-apk') {
+    log.push('Встроенный рантайм Android: Android SDK не требуется');
+    const identity = await loadIdentity();
+    if (identity) log.push('Использую сохранённый ключ подписи');
+    const res = await packageApk(bundle, BRIDGE_JS, {
+      dex: rt.get('android-runtime.dex'), identity,
+    });
+    if (res.identityCreated) {
+      await storeIdentity(res.identity);
+      log.push('Создан ключ подписи и сохранён в приватных файлах приложения');
+      log.push('Сохраните его: без этого ключа нельзя выпустить обновление приложения');
+    }
+    return res;
+  }
+  return null;
+}
+
 function standaloneApi() {
   return {
     mode: 'standalone',
-    canBuildNative: false,
+    canBuildNative: Object.entries(standaloneAvailability())
+      .some(([id, ok]) => ok && !['web-bundle', 'source-project'].includes(id)),
+    availability: standaloneAvailability(),
     async targets() { return describeTargets(); },
     async doctor() {
+      // Report the embedded runtime rather than pretending a toolchain exists.
+      const a = standaloneAvailability();
+      const embedded = (ok) => ({ available: ok, embedded: ok });
       return {
-        zig: { available: false }, java: { available: false },
-        androidSdk: { available: false }, gradle: { available: false },
-        cc: { available: false }, webkit2gtk: { available: false },
+        zig: embedded(a['windows-x64'] || a['windows-x86']),
+        java: embedded(a['android-apk']),
+        androidSdk: embedded(a['android-apk']),
+        gradle: embedded(a['android-apk']),
+        cc: embedded(a['linux-x64']),
+        webkit2gtk: embedded(a['linux-x64']),
         standalone: true,
       };
     },
@@ -141,15 +254,6 @@ function standaloneApi() {
     async build(bytes, filename, target, overrides) {
       const log = [];
       try {
-        if (!['web-bundle', 'source-project'].includes(target)) {
-          return {
-            ok: false,
-            error: 'Нативная сборка недоступна в приложении-компиляторе: на устройстве нет '
-              + 'Zig, JDK и Android SDK. Соберите «Исходный проект» и запустите сборку на ПК '
-              + 'или в GitHub Actions. На ПК запустите: npm run serve',
-            log,
-          };
-        }
         const bundle = loadBundle(bytes, { filename, overrides: cleanOverrides(overrides) });
         log.push(`Бандл: ${bundle.fileCount} файлов, точка входа ${bundle.entry}`);
         log.push(`Права: ${bundle.manifest.permissions.join(', ') || 'нет'}`);
@@ -159,7 +263,29 @@ function standaloneApi() {
           if (i.level === 'error') throw new Error('Бандл не прошёл проверку');
         }
 
-        const stem = (bundle.manifest.name || 'EasyApp').replace(/[^\w.\- ]+/g, '_').replace(/\s+/g, '_');
+        if (!['web-bundle', 'source-project'].includes(target)) {
+          if (!standaloneAvailability()[target]) {
+            return {
+              ok: false,
+              error: 'В этой сборке приложения нет встроенного рантайма для выбранной цели. '
+                + 'Соберите «Исходный проект» и запустите сборку на ПК или в GitHub Actions, '
+                + 'либо возьмите релиз компилятора со встроенными рантаймами.',
+              log,
+            };
+          }
+          const res = await buildNative(bundle, target, log);
+          for (const w of res.warnings || []) log.push(`warning: ${w}`);
+          log.push(`Готово: ${res.filename}, ${(res.bytes.length / 1024).toFixed(1)} KiB`);
+          const saved = await saveArtefact(res.filename, res.bytes);
+          log.push(`Сохранено: ${saved.filename}`);
+          return {
+            ok: true, filename: res.filename, size: res.bytes.length, log,
+            warnings: res.warnings || [], blobUrl: saved.blobUrl || null,
+            savedNatively: !saved.blobUrl,
+          };
+        }
+
+        const stem = safeStem(bundle.manifest.name);
         let files;
         let outName;
         if (target === 'web-bundle') {

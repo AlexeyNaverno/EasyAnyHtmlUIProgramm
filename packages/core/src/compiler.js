@@ -4,19 +4,22 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 
 import { loadBundle } from './bundle.js';
 import { getTarget } from './target-registry.js';
 import {
-  buildWwwTree, buildDesktopPayload, buildAndroidProject, buildLinuxExtras,
-  normalizeTree, lintBundle,
+  buildWwwTree, buildAndroidProject, normalizeTree, lintBundle,
 } from './targets.js';
 import { packZip, strToU8 } from './bundle.js';
 import {
-  REPO_ROOT, readTemplateTree, makeWorkDir, writeTree, cleanup,
-  buildWindowsHost, buildWindowsInstaller, buildLinuxHost, buildAndroidApk,
+  REPO_ROOT, readTemplateTree, makeWorkDir, writeTree, cleanup, buildAndroidApk,
 } from './toolchain.js';
+import { getWindowsRuntimes, getLinuxRuntimes, readRuntime, RUNTIME_NAMES } from './runtimes.js';
+import { packageApk } from './apk/assemble.js';
+import { identityToBase64, identityFromBase64 } from './apk/sign-v2.js';
+import { packageWindows, packageLinux } from './packaging.js';
 
 const BRIDGE_PATH = join(REPO_ROOT, 'packages/core/runtime/bridge.js');
 
@@ -108,6 +111,25 @@ export async function compile(bytes, {
 
   /* ----------------------------------------------------------- Android */
   if (targetId === 'android-apk') {
+    // Fast path: a prebuilt generic DEX lets us assemble and sign the APK here,
+    // with no JDK, Gradle or Android SDK involved.
+    const dex = readRuntime(RUNTIME_NAMES.androidDex());
+    if (dex) {
+      say('Using the prebuilt Android runtime (no SDK needed)');
+      const res = await packageApk(bundle, bridgeJs, {
+        dex, identity: loadSigningIdentity(say),
+      });
+      if (res.identityCreated) saveSigningIdentity(res.identity, say);
+      for (const w of res.warnings) say(`warning: ${w}`);
+      const path = join(outDir, res.filename);
+      writeFileSync(path, res.bytes);
+      say(`Written ${path} (${(res.bytes.length / 1024).toFixed(1)} KiB)`);
+      return {
+        path, filename: res.filename, bytes: res.bytes,
+        warnings: res.warnings, log, projectDir: null, runtimeSource: 'prebuilt',
+      };
+    }
+
     const template = readTemplateTree('templates/runtime-android');
     const project = buildAndroidProject(bundle, bridgeJs, template);
     for (const w of project.warnings) say(`warning: ${w}`);
@@ -148,98 +170,38 @@ export async function compile(bytes, {
 
   /* ----------------------------------------------------------- Windows */
   if (target.platform === 'windows') {
-    const arch = target.arch;
-    const work = makeWorkDir('easyapp-win-');
-    try {
-      const hostPath = join(work, 'app.exe');
-      say(`Compiling the ${arch} host with Zig…`);
-      await buildWindowsHost({ arch, outPath: hostPath });
-      const hostBinary = new Uint8Array(readFileSync(hostPath));
-      const payload = buildDesktopPayload(bundle, bridgeJs, { hostBinary, hostName: 'app.exe' });
-      for (const w of payload.warnings) say(`warning: ${w}`);
-
-      if (target.kind === 'portable') {
-        const outName = `${stem}-windows-${arch}-portable.zip`;
-        const path = join(outDir, outName);
-        writeFileSync(path, payload.zip);
-        say(`Written ${path}`);
-        return { path, filename: outName, bytes: payload.zip, warnings: payload.warnings, log, projectDir: null };
-      }
-
-      say(`Compiling the ${arch} installer with Zig…`);
-      const installerPath = join(work, 'setup.exe');
-      await buildWindowsInstaller({ arch, outPath: installerPath });
-      const stub = readFileSync(installerPath);
-      const trailer = Buffer.alloc(8);
-      trailer.write('EAPK', 0, 'ascii');
-      trailer.writeUInt32LE(payload.zip.length, 4);
-      const exe = Buffer.concat([stub, Buffer.from(payload.zip), trailer]);
-      const outName = `${stem}-setup-${arch}.exe`;
-      const path = join(outDir, outName);
-      writeFileSync(path, exe);
-      say(`Written ${path} (${(exe.length / 1024 / 1024).toFixed(2)} MiB)`);
-      return {
-        path, filename: outName, bytes: new Uint8Array(exe),
-        warnings: payload.warnings, log, projectDir: null,
-      };
-    } finally {
-      cleanup(work);
-    }
+    // The host and installer are generic: they read the manifest at run time.
+    // Prebuilt runtimes make this step pure packaging, so it also works inside
+    // the compiler's own Android app where no C toolchain exists.
+    const runtimes = await getWindowsRuntimes(target.arch, { kind: target.kind, onLog: say });
+    const res = packageWindows(bundle, bridgeJs, runtimes, { arch: target.arch, kind: target.kind });
+    for (const w of res.warnings) say(`warning: ${w}`);
+    const path = join(outDir, res.filename);
+    writeFileSync(path, res.bytes);
+    say(`Written ${path} (${(res.bytes.length / 1024).toFixed(1)} KiB)`);
+    return {
+      path, filename: res.filename, bytes: res.bytes,
+      warnings: res.warnings, log, projectDir: null, runtimeSource: runtimes.source,
+    };
   }
 
   /* ------------------------------------------------------------- Linux */
   if (target.platform === 'linux') {
-    const work = makeWorkDir('easyapp-linux-');
-    try {
-      const hostPath = join(work, 'app');
-      say('Compiling the WebKitGTK host…');
-      await buildLinuxHost({ outPath: hostPath });
-      const hostBinary = new Uint8Array(readFileSync(hostPath));
-      const payload = buildDesktopPayload(bundle, bridgeJs, { hostBinary, hostName: 'app' });
-      for (const w of payload.warnings) say(`warning: ${w}`);
-
-      const extras = buildLinuxExtras(bundle);
-      const files = new Map(payload.files);
-      files.set(`${stem}.desktop`, strToU8(extras.desktop));
-      files.set('install.sh', strToU8(linuxInstallScript(bundle, stem)));
-      files.set('run.sh', strToU8('#!/bin/sh\nexec "$(dirname "$0")/app" "$@"\n'));
-      const zip = packZip(files);
-      const outName = `${stem}-linux-${target.arch}.zip`;
-      const path = join(outDir, outName);
-      writeFileSync(path, zip);
-      say(`Written ${path}`);
-      return { path, filename: outName, bytes: zip, warnings: payload.warnings, log, projectDir: null };
-    } finally {
-      cleanup(work);
-    }
+    const runtimes = await getLinuxRuntimes({ arch: target.arch, onLog: say });
+    const res = packageLinux(bundle, bridgeJs, runtimes, { arch: target.arch });
+    for (const w of res.warnings) say(`warning: ${w}`);
+    const path = join(outDir, res.filename);
+    writeFileSync(path, res.bytes);
+    say(`Written ${path}`);
+    return {
+      path, filename: res.filename, bytes: res.bytes,
+      warnings: res.warnings, log, projectDir: null, runtimeSource: runtimes.source,
+    };
   }
 
   throw new Error(`Target "${targetId}" is not implemented`);
 }
 
-function linuxInstallScript(bundle, stem) {
-  return `#!/bin/sh
-# SPDX-License-Identifier: GPL-3.0-or-later
-# Installs ${bundle.manifest.name} for the current user.
-set -e
-DIR="$(cd "$(dirname "$0")" && pwd)"
-TARGET="\${XDG_DATA_HOME:-$HOME/.local/share}/EasyApp/${bundle.manifest.id}"
-mkdir -p "$TARGET"
-cp -r "$DIR/www" "$TARGET/"
-cp "$DIR/app" "$TARGET/app"
-chmod +x "$TARGET/app"
-mkdir -p "\${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-cat > "\${XDG_DATA_HOME:-$HOME/.local/share}/applications/${bundle.manifest.id}.desktop" <<DESKTOP
-[Desktop Entry]
-Type=Application
-Name=${bundle.manifest.name}
-Exec=$TARGET/app
-Terminal=false
-Categories=Utility;
-DESKTOP
-echo "Installed. Launch '${bundle.manifest.name}' from your application menu, or run: $TARGET/app"
-`;
-}
 
 function sourceProjectReadme(bundle) {
   const m = bundle.manifest;
@@ -287,4 +249,33 @@ function sourceProjectReadme(bundle) {
     'в каталог `www/` рядом с бинарником.',
     '',
   ].join('\n');
+}
+
+/* ------------------------------------------------------ signing identity */
+
+function identityPath() {
+  return process.env.EASYAPP_SIGNING_IDENTITY
+    || join(homedir(), '.easyapp', 'signing-identity.json');
+}
+
+function loadSigningIdentity(say) {
+  const path = identityPath();
+  if (!existsSync(path)) return null;
+  try {
+    return identityFromBase64(JSON.parse(readFileSync(path, 'utf8')));
+  } catch (err) {
+    say(`warning: cannot read the signing key at ${path}: ${err.message}`);
+    return null;
+  }
+}
+
+function saveSigningIdentity(identity, say) {
+  const path = identityPath();
+  try {
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    writeFileSync(path, JSON.stringify(identityToBase64(identity), null, 2), { mode: 0o600 });
+    say(`Signing key saved to ${path} — keep it to publish updates`);
+  } catch (err) {
+    say(`warning: cannot save the signing key: ${err.message}`);
+  }
 }

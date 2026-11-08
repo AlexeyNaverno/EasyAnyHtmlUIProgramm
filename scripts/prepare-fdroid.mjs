@@ -38,6 +38,22 @@ function walk(dir, prefix = '') {
 }
 
 // 1. Generate the standalone UI assets.
+/*
+ * Embed whatever generic runtimes this environment can build. F-Droid provides
+ * a JDK and the Android SDK but not Zig or WebKitGTK headers, so the F-Droid
+ * variant may support fewer native targets than the GitHub release. That is
+ * reported rather than hidden; nothing is downloaded or committed as a blob.
+ */
+try {
+  const { spawnSync } = await import('node:child_process');
+  const res = spawnSync(process.execPath,
+    [join(ROOT, 'scripts', 'build-runtimes.mjs')],
+    { stdio: 'inherit' });
+  if (res.status !== 0) console.log('Some runtimes were unavailable; continuing.');
+} catch (err) {
+  console.log(`Runtime generation skipped: ${err.message}`);
+}
+
 execFileSync(process.execPath, [join(ROOT, 'scripts/build-ui.mjs'), '--assets-only'], {
   stdio: 'inherit',
 });

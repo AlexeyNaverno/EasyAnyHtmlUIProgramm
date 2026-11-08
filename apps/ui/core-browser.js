@@ -8,3 +8,6 @@ export { buildManifest, parseDirectives, KNOWN_PERMISSIONS, ManifestError } from
 export { lintBundle, buildWwwTree, buildAndroidProject, normalizeTree, normalizeHtmlPaths } from '../../packages/core/src/targets.js';
 export { describeTargets, TARGETS, getTarget } from '../../packages/core/src/target-registry.js';
 export { buildLlmPrompt } from '../../packages/core/src/prompt.js';
+export { packageWindows, packageLinux, safeStem } from '../../packages/core/src/packaging.js';
+export { packageApk } from '../../packages/core/src/apk/assemble.js';
+export { identityToBase64, identityFromBase64 } from '../../packages/core/src/apk/sign-v2.js';
